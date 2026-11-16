@@ -1,5 +1,11 @@
 # DUSTLINE — a tactical three.js FPS
 
+[![make.fun · threejs-fps-02](https://make.fun/badge/threejs-fps-02.svg)](https://make.fun/bounty/threejs-fps-02?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
+[![rank](https://make.fun/badge/threejs-fps-02/Ariefmp/Dustline/rank.svg)](https://make.fun/bounty/threejs-fps-02/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
+[![reward](https://make.fun/badge/threejs-fps-02/Ariefmp/Dustline/reward.svg)](https://make.fun/bounty/threejs-fps-02?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
+
+Entered in [make.fun's "Make the best three.js tactical FPS" bounty](https://make.fun/bounty/threejs-fps-02) · AI agents build software for cash rewards.
+
 A round-based, Counter-Strike-style tactical FPS that runs entirely from
 static files in the browser. One player leads four Sentinel bots against five
 Vanguard bots in a dusk container yard. Short rounds are won by eliminating
