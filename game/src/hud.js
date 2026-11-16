@@ -41,6 +41,9 @@ export function createHud(world, game) {
     matchStats: $('match-stats'),
     hint: $('hint'),
     crosshairDot: $('crosshair-dot'),
+    scope: $('scope-overlay'),
+    aliveS: $('alive-s'),
+    aliveV: $('alive-v'),
   };
   const mm = el.minimap.getContext('2d');
   const MM_W = 176;
@@ -63,6 +66,13 @@ export function createHud(world, game) {
   });
 
   // ---- buy menu ----------------------------------------------------------
+  const GEAR_DESC = {
+    kevlar: 'Absorbs half of incoming damage',
+    helmet: 'Cuts headshot damage',
+    defuseKit: 'Defuse the spike in 2.5s instead of 5s',
+    frag: 'Explosive throw · 120 damage on a direct hit',
+    smoke: 'Blocks sight for 12s · stops bots seeing through it',
+  };
   const buyItems = [];
   function buildBuyMenu() {
     const items = [
@@ -73,9 +83,13 @@ export function createHud(world, game) {
       const btn = document.createElement('button');
       btn.className = 'buy-item';
       btn.type = 'button';
-      btn.innerHTML = '<span class="buy-key">' + (i + 1) + '</span><span class="buy-name"></span><span class="buy-price"></span>';
+      btn.innerHTML = '<span class="buy-key">' + (i + 1) + '</span><span class="buy-name"></span><span class="buy-price"></span><span class="buy-desc"></span>';
       btn.querySelector('.buy-name').textContent = item.name;
       btn.querySelector('.buy-price').textContent = item.price === 0 ? 'FREE' : '$' + item.price.toLocaleString('en-US');
+      const desc = WEAPONS[item.id]
+        ? item.damage + ' DMG · ' + Math.round(item.rate * 60) + ' RPM · ' + item.mag + ' mag' + (item.zoom ? ' · scoped' : '') + (item.pellets > 1 ? ' · ' + item.pellets + ' pellets' : '')
+        : (GEAR_DESC[item.id] || '');
+      btn.querySelector('.buy-desc').textContent = desc;
       btn.addEventListener('click', () => {
         if (buyCallback) buyCallback(item.id);
       });
@@ -130,6 +144,19 @@ export function createHud(world, game) {
     el.scoreS.textContent = s;
     el.scoreV.textContent = v;
     el.roundNum.textContent = 'ROUND ' + round;
+  }
+
+  // One dot per living player, per team; the dead dim out.
+  function setAlive(s, v) {
+    for (const [span, alive, total] of [[el.aliveS, s, 5], [el.aliveV, v, 5]]) {
+      let html = '';
+      for (let i = 0; i < total; i += 1) html += '<i class="' + (i < alive ? '' : 'dead') + '"></i>';
+      span.innerHTML = html;
+    }
+  }
+
+  function showScope(on) {
+    el.scope.classList.toggle('on', !!on);
   }
 
   function setCrosshairGap(px) {
@@ -195,7 +222,9 @@ export function createHud(world, game) {
 
   function hint(text) {
     el.hint.textContent = text || '';
-    el.hint.classList.toggle('hidden', !text);
+    // The buy menu already says what the buy hint says; never stack them.
+    const menuOpen = !el.buyMenu.classList.contains('hidden');
+    el.hint.classList.toggle('hidden', !text || menuOpen);
   }
 
   // ---- overlays ----------------------------------------------------------
@@ -301,14 +330,18 @@ export function createHud(world, game) {
   }
 
   return {
-    setHealth, setAmmo, setMoney, setTimer, setScore, setCrosshairGap,
+    setHealth, setAmmo, setMoney, setTimer, setScore, setAlive, showScope, setCrosshairGap,
     hitMarker, damageFlash, killFeed, banner, spikeStatus, hint,
     showOverlay, hideOverlay, updateBuyMenu,
     drawMinimap,
     onPlay(cb) { playCallback = cb; },
     onBuy(cb) { buyCallback = cb; },
     onBuyClose(cb) { buyCloseCallback = cb; },
-    showBuyMenu(show) { el.buyMenu.classList.toggle('hidden', !show); },
+    showBuyMenu(show) {
+      el.buyMenu.classList.toggle('hidden', !show);
+      // The menu already says what the hint says; hide the hint behind it.
+      el.hint.classList.toggle('hidden', show || !el.hint.textContent);
+    },
     isBuyOpen() { return !el.buyMenu.classList.contains('hidden'); },
   };
 }

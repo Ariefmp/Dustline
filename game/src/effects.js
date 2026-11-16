@@ -8,19 +8,21 @@ const SPARK_COUNT = 24;
 const SMOKE_COUNT = 6;
 
 export function createEffects(scene) {
-  // Tracers: thin lines from muzzle to hit point, fading in 70 ms.
+  // Tracers: thin additive lines from muzzle to hit point, fading in 70 ms.
+  // Additive blending makes them glow against the dusk instead of washing out.
   const tracers = [];
   for (let i = 0; i < TRACER_COUNT; i += 1) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0 }));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
     line.frustumCulled = false;
     scene.add(line);
     tracers.push({ line, life: 0 });
   }
   let tracerIdx = 0;
 
-  // Muzzle flash: one reusable sprite + one point light.
+  // Muzzle flash: one reusable sprite + one point light. The texture is a
+  // four-point star so the flash reads as a burst, not a soft blob.
   const flashTex = (() => {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
@@ -32,10 +34,21 @@ export function createEffects(scene) {
     g.addColorStop(1, 'rgba(255,120,20,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 64, 64);
+    // Star spikes: horizontal and vertical bars through the core.
+    ctx.fillStyle = 'rgba(255,220,130,0.9)';
+    ctx.fillRect(30, 2, 4, 60);
+    ctx.fillRect(2, 30, 60, 4);
+    ctx.save();
+    ctx.translate(32, 32);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = 'rgba(255,200,100,0.55)';
+    ctx.fillRect(-2, -22, 4, 44);
+    ctx.fillRect(-22, -2, 44, 4);
+    ctx.restore();
     return new THREE.CanvasTexture(canvas);
   })();
   const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, transparent: true, opacity: 0, depthWrite: false }));
-  flashSprite.scale.set(0.55, 0.55, 1);
+  flashSprite.scale.set(0.8, 0.8, 1);
   scene.add(flashSprite);
   const flashLight = new THREE.PointLight(0xffb35c, 0, 9, 1.6);
   scene.add(flashLight);

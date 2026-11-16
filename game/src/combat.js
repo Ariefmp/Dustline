@@ -169,6 +169,10 @@ export function createCombat(scene, world, effects, audio, deps) {
 
   function botShoot(bot, from, dir, def) {
     const result = resolveShot(from, dir, def, bot, 1);
+    // Flash at the bot's muzzle: eye position, pushed forward and dropped to gun height.
+    _to.copy(from).addScaledVector(dir, 0.6);
+    _to.y -= 0.2;
+    effects.muzzleFlash(_to);
     if (result.point) {
       effects.tracer(from, result.point, def.tracer);
       if (!result.agent) effects.impact(result.point, _to.set(0, 1, 0));

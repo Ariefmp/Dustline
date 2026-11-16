@@ -7,8 +7,8 @@ export const PALETTE = {
   sky: 0x2b3444,        // dusk blue-grey sky
   fog: 0x2b3444,
   ground: 0x8a7a5c,     // dry sand
-  wall: 0x6b6f75,       // concrete
-  wallDark: 0x4a4d52,
+  wall: 0x7d8187,       // concrete, lightened so walls read at dusk
+  wallDark: 0x55585e,
   containerRed: 0xa8442e,
   containerBlue: 0x2e5f7a,
   containerYellow: 0xb98a2e,

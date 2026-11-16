@@ -41,9 +41,11 @@ Click to play (pointer lock). No build step, no network requests, no account.
 ## The game
 
 - **Map** — "Dustline Yard": two spike sites (A north, B south), three lanes
-  (A-long, B-long, mid), container and crate cover, a dusk sun and a distant
-  skyline. All art is procedural: canvas textures, box geometry, synthesized
-  sound. Nothing is copied from any existing game.
+  (A-long, B-long, mid), container and crate cover, stacked second-storey
+  containers, light beams over the sites, a gradient dusk sky with a glowing
+  sun and drifting clouds, dust motes in the low sun, painted mid-lane dashes
+  and oil stains. All art is procedural: canvas textures, box geometry,
+  synthesized sound. Nothing is copied from any existing game.
 - **Rounds** — 15-second buy phase, 100-second rounds, first to 8 takes the
   match (max 15). The spike detonates 35 seconds after the plant.
 - **Economy** — start at $800; $300 per elimination, $3,250 for a round win,
@@ -53,14 +55,22 @@ Click to play (pointer lock). No build step, no network requests, no account.
 - **Gunplay** — hitscan with headshot multipliers, damage falloff, recoil and
   spread that punish firing on the move; stopping, crouching and slow-walking
   pay. Armour absorbs half of incoming damage; helmets blunt headshots.
-- **Bots** — nine bots on a waypoint graph. Vanguard pushes a site with the
-  spike carrier, plants, then holds; Sentinel holds angles, rotates toward
-  gunfire it hears, and defuses when it can. Bots react with a delay, fire in
-  bursts, strafe while engaging, and pick the spike up if the carrier falls.
-- **HUD** — health and armour bars, ammo and money, round timer and score,
-  kill feed, a live minimap (teammates always, enemies only while spotted),
-  spike timer and defuse progress, dynamic crosshair, hitmarkers and damage
-  direction.
+- **Bots** — nine bots on a waypoint graph, each with a role: Vanguard runs a
+  carrier, a rusher, a rifler, a lurker and a sniper; Sentinel runs anchors, a
+  roamer and a sniper. Roles set the weapon, speed, reaction and aim, and each
+  bot wears a slightly different shade of the team cloth. Vanguard pushes a
+  site with the spike carrier, plants, then holds; Sentinel holds angles,
+  rotates toward gunfire it hears, and defuses when it can. Bots react with a
+  delay, fire in bursts, strafe while engaging, flash their muzzles when they
+  shoot, and pick the spike up if the carrier falls. The fallen stay down:
+  a killed bot tips forward onto the yard until the round resets.
+- **HUD** — health and armour bars, ammo and money, round timer and score
+  with alive pips per team, kill feed, a live minimap (teammates always,
+  enemies only while spotted), spike timer and defuse progress, dynamic
+  crosshair, hitmarkers and damage direction. The buy menu lists damage, fire
+  rate and magazine for every weapon. Scoping the Longbow DMR opens a circular
+  scope view. Every weapon has its own viewmodel — the DMR carries a scope,
+  the shotgun a pump, the SMG a suppressor.
 
 ## Structure
 

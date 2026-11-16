@@ -5,13 +5,12 @@
 import * as THREE from 'three';
 import { BOT, WEAPONS, ROUND } from './config.js';
 import { PALETTE } from './config.js';
-import { clamp, dist2D2, angleDelta, randomRange, pick } from './util.js';
+import { clamp, dist2D2, angleDelta, randomRange } from './util.js';
 
 const NAMES = {
   sentinel: ['Ash', 'Bram', 'Cleo', 'Dax'],
   vanguard: ['Ember', 'Flint', 'Gage', 'Hale', 'Ivo'],
 };
-const BOT_GUNS = ['rifle', 'rifle', 'rifle', 'smg', 'smg', 'shotgun', 'sniper'];
 const HOLD_SPOTS = {
   sentinel: [
     { node: 16, yaw: -Math.PI / 2, site: 'A' }, // site A hold
@@ -51,11 +50,14 @@ export function createBots(scene, world, deps) {
     return { sprite, canvas, tex };
   }
 
-  function buildModel(team) {
+  // Each bot gets a slightly different shade of the team cloth and skin, so
+  // the five teammates do not read as clones of one another.
+  function buildModel(team, index) {
     const group = new THREE.Group();
-    const cloth = new THREE.MeshStandardMaterial({ color: PALETTE[team], roughness: 0.85 });
+    const clothColor = new THREE.Color(PALETTE[team]).multiplyScalar(0.85 + index * 0.06);
+    const cloth = new THREE.MeshStandardMaterial({ color: clothColor, roughness: 0.85 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x22242a, roughness: 0.6, metalness: 0.3 });
-    const skin = new THREE.MeshStandardMaterial({ color: 0xc9a06a, roughness: 0.9 });
+    const skin = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xc9a06a).multiplyScalar(0.9 + (index % 3) * 0.08), roughness: 0.9 });
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.62, 0.3), cloth);
     torso.position.y = 1.12;
     const vest = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.34, 0.34), dark);
@@ -113,7 +115,7 @@ export function createBots(scene, world, deps) {
   // ---- one bot -----------------------------------------------------------
   function makeBot(team, index) {
     const name = NAMES[team][index % NAMES[team].length];
-    const model = buildModel(team);
+    const model = buildModel(team, index);
     const bar = makeBarSprite();
     model.group.add(bar.sprite);
     model.group.visible = false; // shown by resetRound when a match starts
@@ -127,7 +129,7 @@ export function createBots(scene, world, deps) {
       group: model.group, parts: model, bar, hitMeshes,
       state: 'hold', path: [], pathI: 0,
       targetNode: 0, holdNode: 0, holdYaw: 0, holdSite: 'mid',
-      route: 'A', hasSpike: false,
+      route: 'A', hasSpike: false, role: 'rifler',
       weapon: 'rifle', mag: 30, reserve: 90, cooldown: 0, reloading: false, reloadTimer: 0,
       burstLeft: 0, burstPause: 0, reaction: 0, visibleEnemy: null,
       strafeDir: 1, strafeTimer: 0, crouch: false,
@@ -154,14 +156,37 @@ export function createBots(scene, world, deps) {
     bot.targetNode = toNode;
   }
 
+  // Roles: each bot plays differently — rushers push fast with SMGs, snipers
+  // hold long angles and rarely miss at range, lurkers flank with shotguns,
+  // anchors hold their site, roamers rotate early. The weapon follows the role.
+  const ROLE_WEAPON = { carrier: 'rifle', rusher: 'smg', rifler: 'rifle', lurker: 'shotgun', sniper: 'sniper', anchor: 'rifle', roamer: 'smg' };
+  const ROLE_MODS = {
+    rusher: { speed: 1.25, reaction: 0.7, aim: 1.3 },
+    sniper: { speed: 0.85, reaction: 1.15, aim: 0.6 },
+    lurker: { speed: 0.9, reaction: 0.9, aim: 0.9 },
+    roamer: { speed: 1.15, reaction: 0.85, aim: 1.05 },
+    anchor: { speed: 0.95, reaction: 1.0, aim: 0.9 },
+    carrier: { speed: 1.0, reaction: 1.0, aim: 1.0 },
+    rifler: { speed: 1.0, reaction: 1.0, aim: 1.0 },
+  };
+  function roleMods(bot) {
+    return ROLE_MODS[bot.role] || ROLE_MODS.rifler;
+  }
+  function speedFor(bot, base) {
+    return base * roleMods(bot).speed;
+  }
+
   function assignRound() {
-    // Vanguard: 3 push A, 2 push B (carrier goes A most rounds, B sometimes).
+    // Vanguard: carrier pushes the main site, rusher and lurker flank,
+    // rifler escorts, sniper trails and picks long angles.
     const carrierSite = random() < 0.65 ? 'A' : 'B';
     const vanguard = list.filter((b) => b.team === 'vanguard');
+    const vanguardRoles = ['carrier', 'rusher', 'rifler', 'lurker', 'sniper'];
     vanguard.forEach((bot, i) => {
+      bot.role = vanguardRoles[i];
       bot.route = i < 3 ? carrierSite : carrierSite === 'A' ? 'B' : 'A';
       bot.hasSpike = i === 0;
-      bot.weapon = pick(random, BOT_GUNS);
+      bot.weapon = ROLE_WEAPON[bot.role];
       bot.mag = WEAPONS[bot.weapon].mag;
       bot.reserve = WEAPONS[bot.weapon].reserve;
       bot.armor = random() < 0.5 ? 50 : 0;
@@ -169,14 +194,16 @@ export function createBots(scene, world, deps) {
     });
     game.spikeHolder = vanguard[0];
     game.spike = { planted: false, site: null, x: 0, z: 0, timer: 0, carrier: vanguard[0] };
-    // Sentinel: two hold A, two hold B, one holds mid.
+    // Sentinel: two anchors hold the sites, one roamer rotates, one sniper watches mid.
     const sentinels = list.filter((b) => b.team === 'sentinel');
+    const sentinelRoles = ['anchor', 'anchor', 'roamer', 'sniper'];
     sentinels.forEach((bot, i) => {
       const spot = HOLD_SPOTS.sentinel[i];
+      bot.role = sentinelRoles[i];
       bot.holdNode = spot.node;
       bot.holdYaw = spot.yaw;
       bot.holdSite = spot.site;
-      bot.weapon = pick(random, BOT_GUNS);
+      bot.weapon = ROLE_WEAPON[bot.role];
       bot.mag = WEAPONS[bot.weapon].mag;
       bot.reserve = WEAPONS[bot.weapon].reserve;
       bot.armor = random() < 0.6 ? 50 : 0;
@@ -203,6 +230,7 @@ export function createBots(scene, world, deps) {
       bot.burstPause = 0;
       bot.reaction = 0;
       bot.group.visible = true;
+      bot.group.rotation.x = 0;
       bot.bar.sprite.visible = false;
       updateBar(bot);
     }
@@ -370,7 +398,7 @@ export function createBots(scene, world, deps) {
     const dy = aimY - (bot.pos.y + bot.eyeY);
     const dz = tp.z - bot.pos.z;
     const dist = Math.hypot(dx, dy, dz) || 1;
-    const err = BOT.aimError * (1.6 - bot.skill) * (1 + dist / 45);
+    const err = BOT.aimError * (1.6 - bot.skill) * (1 + dist / 45) * roleMods(bot).aim;
     _dir.set(
       dx / dist + (random() * 2 - 1) * err,
       dy / dist + (random() * 2 - 1) * err * 0.7,
@@ -387,7 +415,7 @@ export function createBots(scene, world, deps) {
     const seen = nearestVisibleEnemy(bot);
     if (seen && seen !== bot.visibleEnemy) {
       bot.visibleEnemy = seen;
-      bot.reaction = randomRange(random, BOT.reactionMin, BOT.reactionMax) * (1.3 - bot.skill * 0.5);
+      bot.reaction = randomRange(random, BOT.reactionMin, BOT.reactionMax) * (1.3 - bot.skill * 0.5) * roleMods(bot).reaction;
     } else if (!seen) {
       bot.visibleEnemy = null;
     }
@@ -440,7 +468,7 @@ export function createBots(scene, world, deps) {
     if (spike.planted) {
       // Hold the site after the plant.
       if (bot.state !== 'hold') { bot.state = 'hold'; setPath(bot, bot.route === 'A' ? 3 : 6); }
-      if (followPath(bot, dt, BOT.walkSpeed)) {
+      if (followPath(bot, dt, speedFor(bot, BOT.walkSpeed))) {
         bot.yaw += Math.sin(game.time * 0.4 + bot.index) * dt * 0.5;
       }
       return;
@@ -461,7 +489,7 @@ export function createBots(scene, world, deps) {
         return;
       }
       bot.state = 'advance';
-      followPath(bot, dt, BOT.runSpeed);
+      followPath(bot, dt, speedFor(bot, BOT.runSpeed));
       return;
     }
     // Not the carrier: if the spike is on the ground, go pick it up.
@@ -478,7 +506,7 @@ export function createBots(scene, world, deps) {
         bot.state = 'fetch';
         setPath(bot, nearestNode(spike.x, spike.z));
       }
-      followPath(bot, dt, BOT.runSpeed);
+      followPath(bot, dt, speedFor(bot, BOT.runSpeed));
       return;
     }
     // Escort the carrier's route.
@@ -486,7 +514,7 @@ export function createBots(scene, world, deps) {
       bot.state = 'advance';
       setPath(bot, bot.route === 'A' ? 3 : 6);
     }
-    followPath(bot, dt, BOT.runSpeed);
+    followPath(bot, dt, speedFor(bot, BOT.runSpeed));
   }
 
   function stepSentinel(bot, dt) {
@@ -506,7 +534,7 @@ export function createBots(scene, world, deps) {
         bot.state = 'rotate';
         setPath(bot, spike.site === 'A' ? 3 : 6);
       }
-      followPath(bot, dt, BOT.runSpeed);
+      followPath(bot, dt, speedFor(bot, BOT.runSpeed));
       return;
     }
     // Rotate toward recent gunfire near a site.
@@ -518,14 +546,14 @@ export function createBots(scene, world, deps) {
       }
     }
     if (bot.state === 'rotate') {
-      if (followPath(bot, dt, BOT.runSpeed)) {
+      if (followPath(bot, dt, speedFor(bot, BOT.runSpeed))) {
         bot.state = 'hold';
         bot.heardAt = 0;
       }
       return;
     }
     if (bot.state === 'advance') {
-      if (followPath(bot, dt, BOT.walkSpeed)) bot.state = 'hold';
+      if (followPath(bot, dt, speedFor(bot, BOT.walkSpeed))) bot.state = 'hold';
       return;
     }
     // Hold: face the assigned angle, scan slowly.
@@ -571,7 +599,8 @@ export function createBots(scene, world, deps) {
     if (bot.health <= 0) {
       bot.health = 0;
       bot.alive = false;
-      bot.group.visible = false;
+      // The body stays: it tips forward onto the yard until the round resets.
+      bot.group.rotation.x = -Math.PI / 2 * 0.95;
       bot.bar.sprite.visible = false;
       if (bot.hasSpike) {
         bot.hasSpike = false;

@@ -45,7 +45,7 @@ function buildTextures(random) {
   ground.repeat.set(10, 8);
 
   const concrete = canvasTexture(256, (ctx, s) => {
-    speckle(ctx, s, random, '#6b6f75', 2200, 0.12);
+    speckle(ctx, s, random, '#7d8187', 2200, 0.12);
     ctx.strokeStyle = 'rgba(0,0,0,0.18)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i += 1) {
@@ -187,6 +187,10 @@ export function createWorld(scene, seed = 7) {
   box(-8, 16.5, 6, 2.6, 2.4, 'blue');
   box(16, -4, 6, 2.6, 2.4, 'yellow');
   box(16, 5, 6, 2.6, 2.4, 'green');
+  // Second-storey stacks: verticality the yard reads from every lane.
+  box(-6, -4, 6, 2.6, 2.4, 'blue', { y: 2.6 });
+  box(-8, 16.5, 6, 2.6, 2.4, 'red', { y: 2.6 });
+  box(16, 5, 6, 2.6, 2.4, 'yellow', { y: 2.6 });
 
   // Crates.
   const crateSpots = [[-2, -6], [-2, 6], [10, -6], [10, 6], [-18, -2], [-18, 2], [16, -13], [16, 13], [2, -14], [2, 14], [18, -13], [18, 13]];
@@ -207,6 +211,64 @@ export function createWorld(scene, seed = 7) {
   }
   siteMarker(-12, -12, tex.siteA);
   siteMarker(-12, 12, tex.siteB);
+
+  // Light beams over the sites so attackers and defenders read them at a glance.
+  const beamMat = new THREE.MeshBasicMaterial({ color: 0xe8a33d, transparent: true, opacity: 0.055, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  for (const [bx, bz] of [[-12, -12], [-12, 12]]) {
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 30, 20, 1, true), beamMat);
+    beam.position.set(bx, 15, bz);
+    group.add(beam);
+  }
+
+  // Painted mid-lane dashes and oil stains: the yard reads as used, not flat.
+  const dashTex = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 128, 16);
+    ctx.fillStyle = 'rgba(232,163,61,0.85)';
+    ctx.fillRect(8, 5, 56, 6);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.set(11, 1);
+    return tex;
+  })();
+  const dashes = new THREE.Mesh(
+    new THREE.PlaneGeometry(44, 0.4),
+    new THREE.MeshBasicMaterial({ map: dashTex, transparent: true, roughness: 0.9 }),
+  );
+  dashes.rotation.x = -Math.PI / 2;
+  dashes.position.set(0, 0.015, 0);
+  dashes.receiveShadow = true;
+  group.add(dashes);
+  const stainMat = new THREE.MeshBasicMaterial({ color: 0x1a140d, transparent: true, opacity: 0.35, depthWrite: false });
+  for (const [sx, sz, sr] of [[-2, -2, 1.8], [8, 9, 1.4], [-14, 6, 2.1], [12, -9, 1.5]]) {
+    const stain = new THREE.Mesh(new THREE.CircleGeometry(sr, 18), stainMat);
+    stain.rotation.x = -Math.PI / 2;
+    stain.position.set(sx, 0.012, sz);
+    group.add(stain);
+  }
+
+  // Drifting dust motes in the low sun: the air itself has texture.
+  const DUST_COUNT = 200;
+  const dustGeo = new THREE.BufferGeometry();
+  const dustPos = new Float32Array(DUST_COUNT * 3);
+  for (let i = 0; i < DUST_COUNT; i += 1) {
+    dustPos[i * 3] = -22 + random() * 44;
+    dustPos[i * 3 + 1] = 0.3 + random() * 5.5;
+    dustPos[i * 3 + 2] = -18 + random() * 36;
+  }
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+  const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xffd9a0, size: 0.045, transparent: true, opacity: 0.4, depthWrite: false }));
+  dust.frustumCulled = false;
+  scene.add(dust);
+  let dustTime = 0;
+  function stepWorld(dt) {
+    dustTime += dt;
+    dust.rotation.y = dustTime * 0.008;
+    dust.position.y = Math.sin(dustTime * 0.25) * 0.25;
+  }
 
   // Distant skyline silhouettes for depth, outside the walls.
   const skyline = new THREE.Group();
@@ -232,10 +294,83 @@ export function createWorld(scene, seed = 7) {
   sun.lookAt(0, 0, 0);
   scene.add(sun);
 
+  // Warm glow halo around the sun so the dusk reads from every angle.
+  const glowTex = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    g.addColorStop(0, 'rgba(255,190,100,0.85)');
+    g.addColorStop(0.35, 'rgba(255,150,70,0.35)');
+    g.addColorStop(1, 'rgba(255,140,60,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(canvas);
+  })();
+  const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.9, depthWrite: false, fog: false }));
+  sunGlow.position.copy(sun.position);
+  sunGlow.scale.set(46, 46, 1);
+  scene.add(sunGlow);
+
+  // Gradient dusk sky dome: indigo overhead, warm orange at the horizon.
+  const skyTex = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, '#101827');
+    g.addColorStop(0.45, '#2b3444');
+    g.addColorStop(0.72, '#5a4a52');
+    g.addColorStop(0.88, '#a8623e');
+    g.addColorStop(1, '#e08a4a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 16, 512);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  })();
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(165, 24, 16),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }),
+  );
+  scene.add(skyDome);
+
+  // Slow dusk clouds: soft warm-grey blobs high above the yard.
+  const cloudTex = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    for (let i = 0; i < 22; i += 1) {
+      const x = 30 + random() * 196;
+      const y = 34 + random() * 60;
+      const r = 18 + random() * 34;
+      const g = ctx.createRadialGradient(x, y, 1, x, y, r);
+      g.addColorStop(0, 'rgba(214,178,150,0.28)');
+      g.addColorStop(1, 'rgba(214,178,150,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 256, 128);
+    }
+    return new THREE.CanvasTexture(canvas);
+  })();
+  const clouds = new THREE.Group();
+  for (let i = 0; i < 7; i += 1) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.75, depthWrite: false, fog: false }));
+    const angle = random() * Math.PI * 2;
+    const r = 70 + random() * 60;
+    sprite.position.set(Math.cos(angle) * r, 34 + random() * 22, Math.sin(angle) * r);
+    const w = 60 + random() * 55;
+    sprite.scale.set(w, w * 0.36, 1);
+    clouds.add(sprite);
+  }
+  scene.add(clouds);
+
   // Lighting: warm low sun, cool sky fill, ground bounce.
-  const hemi = new THREE.HemisphereLight(0x8fa3c0, 0x8a7a5c, 0.85);
+  const hemi = new THREE.HemisphereLight(0x8fa3c0, 0x8a7a5c, 1.05);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xffb35c, 2.4);
+  const key = new THREE.DirectionalLight(0xffb35c, 2.7);
   key.position.set(-28, 22, -14);
   key.target.position.set(4, 0, 2);
   key.castShadow = true;
@@ -294,6 +429,7 @@ export function createWorld(scene, seed = 7) {
     spike,
     spikeLight,
     group,
+    step: stepWorld,
     sites: {
       A: { center: { x: -12, z: -12 }, plant: { x: -12, z: -12 }, zone: { minX: -16, maxX: -8, minZ: -16, maxZ: -8 } },
       B: { center: { x: -12, z: 12 }, plant: { x: -12, z: 12 }, zone: { minX: -16, maxX: -8, minZ: 8, maxZ: 16 } },

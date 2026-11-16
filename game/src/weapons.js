@@ -18,26 +18,51 @@ export function createWeapons(camera, audio) {
     spreadBloom: 0, // grows while firing, decays while idle
   };
 
-  // Procedural viewmodel: a gun built from boxes, parented to the camera.
+  // Procedural viewmodel: a proper rifle built from boxes, parented to the
+  // camera. One build, reconfigured per weapon: the sniper carries a scope,
+  // the shotgun a pump, the SMG a suppressor, the pistol no stock.
   const gun = new THREE.Group();
   const gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.45, metalness: 0.7 });
   const gunAccent = new THREE.MeshStandardMaterial({ color: 0x8a6a2f, roughness: 0.5, metalness: 0.6 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, 0.5), gunMat);
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.34), gunMat);
-  barrel.position.set(0, 0.02, -0.4);
+  const gunDark = new THREE.MeshStandardMaterial({ color: 0x17191d, roughness: 0.55, metalness: 0.5 });
+  const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.34), gunMat);
+  receiver.position.set(0, 0, 0.08);
+  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.18), gunDark);
+  stock.position.set(0, -0.02, 0.32);
+  const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.3), gunDark);
+  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.18), gunMat);
+  const muzzleBrake = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.08), gunAccent);
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.1), gunAccent);
   grip.position.set(0, -0.12, 0.16);
   grip.rotation.x = 0.35;
-  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.08), gunAccent);
-  sight.position.set(0, 0.09, -0.05);
-  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.09), gunMat);
-  mag.position.set(0, -0.11, -0.05);
-  gun.add(body, barrel, grip, sight, mag);
+  const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.06, 0.015), gunAccent);
+  const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.02), gunAccent);
+  rearSight.position.set(0, 0.085, 0.05);
+  const dotSight = new THREE.Mesh(
+    new THREE.SphereGeometry(0.012, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xff4444 }),
+  );
+  dotSight.position.set(0, 0.095, -0.02);
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.09), gunMat);
+  mag.position.set(0, -0.12, 0);
+  mag.rotation.x = 0.25;
+  const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.24, 12), gunDark);
+  scope.rotation.x = Math.PI / 2;
+  scope.position.set(0, 0.11, -0.12);
+  const scopeLens = new THREE.Mesh(
+    new THREE.CircleGeometry(0.028, 12),
+    new THREE.MeshBasicMaterial({ color: 0x1a3a5a }),
+  );
+  scopeLens.position.set(0, 0.11, -0.245);
+  scopeLens.rotation.y = Math.PI;
+  const pump = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.18), gunAccent);
+  const suppressor = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 12), gunDark);
+  suppressor.rotation.x = Math.PI / 2;
+  gun.add(receiver, stock, handguard, barrel, muzzleBrake, grip, frontSight, rearSight, dotSight, mag, scope, scopeLens, pump, suppressor);
   gun.position.set(0.26, -0.24, -0.5);
   camera.add(gun);
 
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0.02, -0.62);
   gun.add(muzzle);
 
   const bobPhase = { value: 0 };
@@ -80,10 +105,24 @@ export function createWeapons(camera, audio) {
   function updateViewmodel() {
     const def = currentDef();
     const len = def.id === 'sniper' ? 0.78 : def.id === 'shotgun' ? 0.66 : def.id === 'smg' ? 0.52 : def.id === 'rifle' ? 0.62 : 0.36;
-    body.scale.z = len / 0.5;
-    barrel.position.z = -len / 2 - 0.1;
-    barrel.scale.z = len / 0.5;
-    muzzle.position.z = -len / 2 - 0.28;
+    const front = -0.09; // front face of the receiver
+    const hg = Math.max(0.06, len - 0.3); // handguard length
+    handguard.scale.z = hg / 0.3;
+    handguard.position.set(0, 0.01, front - hg / 2);
+    barrel.position.set(0, 0.02, front - hg - 0.09);
+    muzzleBrake.position.set(0, 0.02, front - hg - 0.21);
+    muzzle.position.set(0, 0.02, front - hg - 0.3);
+    frontSight.position.set(0, 0.09, front - hg + 0.05);
+    const isSniper = def.id === 'sniper';
+    scope.visible = isSniper;
+    scopeLens.visible = isSniper;
+    dotSight.visible = !isSniper;
+    frontSight.visible = !isSniper;
+    pump.visible = def.id === 'shotgun';
+    if (pump.visible) pump.position.set(0, -0.075, front - hg / 2);
+    suppressor.visible = def.id === 'smg';
+    if (suppressor.visible) suppressor.position.set(0, 0.02, front - hg - 0.11);
+    stock.visible = def.id !== 'pistol';
     gun.visible = true;
   }
 

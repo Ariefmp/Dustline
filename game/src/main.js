@@ -44,6 +44,8 @@ const game = {
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('game').appendChild(renderer.domElement);
@@ -428,6 +430,7 @@ function step(dt) {
   combat.stepGrenades(dt);
   rounds.step(dt);
   effects.step(dt);
+  world.step(dt);
   combat.syncPlayer();
 
   // Defuse: hold E near a planted spike.
@@ -457,6 +460,10 @@ function updateHud(dt) {
   hud.setAmmo(ammo.mag, ammo.reserve, def.name);
   hud.setTimer(game.roundTimer, game.phase);
   hud.setMoney(game.money);
+  const sAlive = (s.alive ? 1 : 0) + bots.list.filter((b) => b.alive && b.team === 'sentinel').length;
+  const vAlive = bots.list.filter((b) => b.alive && b.team === 'vanguard').length;
+  hud.setAlive(sAlive, vAlive);
+  hud.showScope(weapons.state.scoped && game.phase === 'live');
   const spreadPx = 5 + weapons.spread(player.groundSpeed() > 0.5, !s.onGround, s.crouched) * 900;
   hud.setCrosshairGap(weapons.state.scoped ? 0 : spreadPx);
   document.getElementById('crosshair').style.opacity = weapons.state.scoped ? '0' : '1';
@@ -551,7 +558,7 @@ function runShot(name) {
   if (name === 'start') {
     player.spawn(16, 12, Math.PI * 0.62);
     settle(10);
-    aimAt(new THREE.Vector3(-8, 1.5, -6));
+    aimAt(new THREE.Vector3(-12, 1.5, 12));
     hud.showOverlay('start');
     hud.setScore(0, 0, 1);
     paintTwiceThenReady();
@@ -566,20 +573,24 @@ function runShot(name) {
     return;
   }
   if (name === 'end') {
-    game.score.sentinel = 5;
+    // Stage the match point: 7–3, win the round, then let the intermission
+    // elapse so the real match-end overlay (with stats) is what shows.
+    game.score.sentinel = 7;
     game.score.vanguard = 3;
     settle(30);
     rounds.endRound('sentinel', 'Enemy team eliminated');
-    player.spawn(8, 4, Math.PI * 0.6);
-    settle(5);
-    aimAt(new THREE.Vector3(-8, 1.5, -8));
+    player.spawn(14, -12, Math.PI * 0.5);
+    aimAt(new THREE.Vector3(-12, 1.5, -12));
+    settle(320);
     paintTwiceThenReady();
     return;
   }
-  // play: jump straight into live play, let the bots advance, then aim at one.
+  // play: jump straight into live play, let the bots advance, then stage a
+  // clear shot at the nearest Vanguard bot from a vantage with line of sight.
   game.phase = 'live';
   game.roundTimer = 88;
   hud.showBuyMenu(false);
+  hud.hint('');
   settle(150);
   let target = null;
   let bestD = Infinity;
@@ -589,7 +600,19 @@ function runShot(name) {
     if (d < bestD) { bestD = d; target = bot; }
   }
   if (target) {
-    player.spawn(target.pos.x + 11, target.pos.z + 3, 0);
+    const insideSolid = (x, z) => world.colliders.some((c) => c.minY < 1.6 && x > c.minX - 0.4 && x < c.maxX + 0.4 && z > c.minZ - 0.4 && z < c.maxZ + 0.4);
+    let spawned = false;
+    for (let a = 0; a < 8 && !spawned; a += 1) {
+      const ang = (a / 8) * Math.PI * 2;
+      const sx = target.pos.x + Math.cos(ang) * 8;
+      const sz = target.pos.z + Math.sin(ang) * 8;
+      if (sx < -21 || sx > 21 || sz < -17 || sz > 17) continue;
+      if (insideSolid(sx, sz)) continue;
+      if (!combat.los(sx, 1.6, sz, target.pos.x, target.pos.y + 1.2, target.pos.z)) continue;
+      player.spawn(sx, sz, 0);
+      spawned = true;
+    }
+    if (!spawned) player.spawn(target.pos.x + 8, target.pos.z + 3, 0);
     settle(6);
     aimAt(new THREE.Vector3(target.pos.x, target.pos.y + 1.3, target.pos.z));
     tryShoot(true);
